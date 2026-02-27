@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -8,8 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
-import { noteStore } from '../../utils/noteStore';
-import type { NoteItem } from '../../types/note';
+import type { ListItem } from './NoteList';
 
 function formatDate(ms: number): string {
   if (!ms) return '';
@@ -28,7 +26,7 @@ function formatCount(n: number): string {
 interface ChartPoint {
   date: string;       // X 轴显示：yyyy-mm-dd
   title: string;      // tooltip 显示完整标题
-  likes: number;      // Y 轴
+  metric: number;     // Y 轴
   ts: number;         // 原始时间戳，用于排序
 }
 
@@ -58,25 +56,26 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
       >
         {d.title || '（无标题）'}
       </div>
-      <div style={{ color: '#fe2c55', marginBottom: '4px' }}>❤️ {formatCount(d.likes)}</div>
+      <div style={{ color: '#fe2c55', marginBottom: '4px' }}>📈 {formatCount(d.metric)}</div>
       <div style={{ color: '#999' }}>📅 {d.date}</div>
     </div>
   );
 }
 
-function openFullscreenChart() {
-  const url = browser.runtime.getURL('/chart.html');
+function openFullscreenChart(platform: 'xhs' | 'youtube') {
+  const url = browser.runtime.getURL(`/chart.html?platform=${platform}`);
   window.open(url, '_blank', 'width=1200,height=800');
 }
 
-export default function LikeChart() {
-  const [notes, setNotes] = useState<NoteItem[]>(noteStore.get());
+interface LikeChartProps {
+  items: ListItem[];
+  metricLabel: string;
+  platform: 'xhs' | 'youtube';
+}
 
-  useEffect(() => {
-    return noteStore.subscribe((updated) => setNotes([...updated]));
-  }, []);
+export default function LikeChart({ items, metricLabel, platform }: LikeChartProps) {
 
-  if (notes.length === 0) {
+  if (items.length === 0) {
     return (
       <div style={{ padding: '32px 16px', textAlign: 'center', color: '#bbb' }}>
         <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
@@ -88,21 +87,21 @@ export default function LikeChart() {
   }
 
   // 按时间升序排列（折线图左→右 = 旧→新）
-  const data: ChartPoint[] = [...notes]
+  const data: ChartPoint[] = [...items]
     .sort((a, b) => a.publishTime - b.publishTime)
     .map((n) => ({
       date: formatDate(n.publishTime),
       title: n.title,
-      likes: n.likedCount,
+      metric: n.metricCount,
       ts: n.publishTime,
     }));
 
   return (
     <div style={{ padding: '12px 4px 8px 0', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '0 12px 8px', fontSize: '12px', color: '#999', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>共 <b style={{ color: '#fe2c55' }}>{notes.length}</b> 篇 · 按发布时间排列</span>
+        <span>共 <b style={{ color: '#fe2c55' }}>{items.length}</b> 篇 · 按发布时间排列 · {metricLabel}</span>
         <button
-          onClick={openFullscreenChart}
+          onClick={() => openFullscreenChart(platform)}
           style={{
             background: '#fe2c55',
             color: '#fff',
@@ -144,12 +143,13 @@ export default function LikeChart() {
             <Tooltip content={<CustomTooltip />} />
 
             <Line
-              type="monotone"
-              dataKey="likes"
+              type="linear"
+              dataKey="metric"
               stroke="#fe2c55"
               strokeWidth={2}
               dot={{ r: 3, fill: '#fe2c55', strokeWidth: 0 }}
               activeDot={{ r: 5, fill: '#fe2c55' }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>

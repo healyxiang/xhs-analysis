@@ -17,12 +17,8 @@ export default defineConfig({
   vite: () => ({
     plugins: [tailwindcss()],
   }),
-  // 使用独立的 Dev Profile，保留小红书登录态
-  // 与日常 Chrome 互不干扰，无需退出 Chrome 再运行 pnpm dev
-  // 首次使用若登录态失效，在弹出的浏览器中重新登录小红书即可（只需一次）
-  browser: "chrome",
+  // 禁用启动新浏览器的逻辑
   runner: {
-    chromiumProfile: `${process.env.HOME}/Library/Application Support/Google/Chrome/XhsDevProfile`,
-    startUrls: ["https://www.xiaohongshu.com"],
+    disabled: true,
   },
 });

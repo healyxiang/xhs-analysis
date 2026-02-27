@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
-import { noteStore } from '../../utils/noteStore';
-import type { NoteItem } from '../../types/note';
+import { useState } from 'react';
+
+export interface ListItem {
+  id: string;
+  title: string;
+  publishTime: number;
+  metricCount: number;
+  href: string;
+}
 
 function formatTime(ms: number): string {
   if (!ms) return '未知';
@@ -14,16 +20,23 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-export default function NoteList() {
-  const [notes, setNotes] = useState<NoteItem[]>(noteStore.get());
-  const [sortBy, setSortBy] = useState<'time' | 'liked'>('time');
+interface NoteListProps {
+  items: ListItem[];
+  metricLabel: string;
+  metricIcon: string;
+  onClear: () => void;
+}
+
+export default function NoteList({
+  items,
+  metricLabel,
+  metricIcon,
+  onClear,
+}: NoteListProps) {
+  const [sortBy, setSortBy] = useState<'time' | 'metric'>('time');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
 
-  useEffect(() => {
-    return noteStore.subscribe((updated) => setNotes([...updated]));
-  }, []);
-
-  function handleSortClick(key: 'time' | 'liked') {
+  function handleSortClick(key: 'time' | 'metric') {
     if (key === sortBy) {
       // 再次点击同一个：切换升降序
       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
@@ -34,15 +47,15 @@ export default function NoteList() {
     }
   }
 
-  const sorted = [...notes].sort((a, b) => {
+  const sorted = [...items].sort((a, b) => {
     const diff =
       sortBy === 'time'
         ? a.publishTime - b.publishTime
-        : a.likedCount - b.likedCount;
+        : a.metricCount - b.metricCount;
     return sortDir === 'desc' ? -diff : diff;
   });
 
-  if (notes.length === 0) {
+  if (items.length === 0) {
     return (
       <div style={{ padding: '24px 16px', textAlign: 'center', color: '#aaa' }}>
         <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
@@ -67,10 +80,10 @@ export default function NoteList() {
         }}
       >
         <span style={{ fontSize: '12px', color: '#888', marginRight: '4px' }}>
-          共 {notes.length} 篇
+          共 {items.length} 篇
         </span>
         <span style={{ fontSize: '12px', color: '#888' }}>排序：</span>
-        {(['time', 'liked'] as const).map((key) => {
+        {(['time', 'metric'] as const).map((key) => {
           const isActive = sortBy === key;
           const arrow = isActive ? (sortDir === 'desc' ? ' ↓' : ' ↑') : '';
           return (
@@ -88,12 +101,13 @@ export default function NoteList() {
                 cursor: 'pointer',
               }}
             >
-              {key === 'time' ? '发布时间' : '点赞数'}{arrow}
+              {key === 'time' ? '发布时间' : metricLabel}
+              {arrow}
             </button>
           );
         })}
         <button
-          onClick={() => noteStore.clear()}
+          onClick={onClear}
           style={{
             marginLeft: 'auto',
             padding: '3px 8px',
@@ -113,7 +127,7 @@ export default function NoteList() {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {sorted.map((note, i) => (
           <a
-            key={note.noteId}
+            key={note.id}
             href={note.href}
             target="_blank"
             rel="noreferrer"
@@ -165,7 +179,9 @@ export default function NoteList() {
               </div>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#888' }}>
                 <span>🕐 {formatTime(note.publishTime)}</span>
-                <span>❤️ {formatCount(note.likedCount)}</span>
+                <span>
+                  {metricIcon} {formatCount(note.metricCount)}
+                </span>
               </div>
             </div>
           </a>

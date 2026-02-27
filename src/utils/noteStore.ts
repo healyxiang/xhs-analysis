@@ -70,6 +70,7 @@ class NoteStore {
     this.currentBlogger = name;
     if (stats) this.currentStats = stats;
     this.bloggerListeners.forEach((fn) => fn(name, this.currentStats));
+    this.saveToStorage();
   }
 
   subscribe(fn: Listener): () => void {
@@ -92,7 +93,13 @@ class NoteStore {
   }
 
   private saveToStorage() {
-    browser.storage.session.set({ xhs_notes: this.notes }).catch(() => {});
+    browser.storage.session
+      .set({
+        xhs_notes: this.notes,
+        xhs_blogger: this.currentBlogger,
+        xhs_stats: this.currentStats,
+      })
+      .catch(() => {});
   }
 
   // ── 跨上下文通信 ──────────────────────────────────────────

@@ -3,27 +3,143 @@ import NoteList from './NoteList';
 import LikeChart from './LikeChart';
 import { noteStore } from '../../utils/noteStore';
 import type { BloggerStats } from '../../utils/noteStore';
+import { youtubeStore } from '../../utils/youtubeStore';
+import type { YoutubeBloggerStats } from '../../utils/youtubeStore';
+import type { ListItem } from './NoteList';
 
 type Tab = 'list' | 'chart';
+type Platform = 'xhs' | 'youtube';
+
+function platformFromUrl(url?: string): Platform {
+  if (url?.includes('youtube.com')) return 'youtube';
+  return 'xhs';
+}
 
 function Sidebar() {
   const [tab, setTab] = useState<Tab>('list');
-  const [blogger, setBlogger] = useState(noteStore.getBlogger());
-  const [stats, setStats] = useState<BloggerStats>(noteStore.getStats());
+  const [platform, setPlatform] = useState<Platform>('xhs');
+
+  const [xhsNotes, setXhsNotes] = useState(noteStore.get());
+  const [ytVideos, setYtVideos] = useState(youtubeStore.get());
+
+  const [xhsBlogger, setXhsBlogger] = useState(noteStore.getBlogger());
+  const [xhsStats, setXhsStats] = useState<BloggerStats>(noteStore.getStats());
+  const [ytBlogger, setYtBlogger] = useState(youtubeStore.getBlogger());
+  const [ytStats, setYtStats] = useState<YoutubeBloggerStats>(youtubeStore.getStats());
   const [refreshing, setRefreshing] = useState(false);
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
-    return noteStore.subscribeBlogger((name, s) => {
-      setBlogger(name);
-      setStats(s);
+    const unsubXhs = noteStore.subscribe((updated) => setXhsNotes([...updated]));
+    const unsubYt = youtubeStore.subscribe((updated) => setYtVideos([...updated]));
+    const unsubXhsBlogger = noteStore.subscribeBlogger((name, s) => {
+      setXhsBlogger(name);
+      setXhsStats(s);
     });
+    const unsubYtBlogger = youtubeStore.subscribeBlogger((name, s) => {
+      setYtBlogger(name);
+      setYtStats(s);
+    });
+
+    return () => {
+      unsubXhs();
+      unsubYt();
+      unsubXhsBlogger();
+      unsubYtBlogger();
+    };
   }, []);
+
+  // 兜底：侧边栏打开时，从 session 恢复已采集数据（避免错过 content script 首次消息）
+  useEffect(() => {
+    browser.storage.session
+      .get([
+        'xhs_notes',
+        'xhs_blogger',
+        'xhs_stats',
+        'yt_videos',
+        'yt_blogger',
+        'yt_stats',
+      ])
+      .then((result) => {
+        const xhsNotesStored = Array.isArray(result.xhs_notes) ? result.xhs_notes : [];
+        const ytVideosStored = Array.isArray(result.yt_videos) ? result.yt_videos : [];
+        setXhsNotes(xhsNotesStored as typeof xhsNotes);
+        setYtVideos(ytVideosStored as typeof ytVideos);
+        if (typeof result.xhs_blogger === 'string') setXhsBlogger(result.xhs_blogger);
+        if (result.xhs_stats) setXhsStats(result.xhs_stats as BloggerStats);
+        if (typeof result.yt_blogger === 'string') setYtBlogger(result.yt_blogger);
+        if (result.yt_stats) setYtStats(result.yt_stats as YoutubeBloggerStats);
+      })
+      .finally(() => setBootstrapped(true));
+  }, []);
+
+  useEffect(() => {
+    const updateActivePlatform = () => {
+      browser.windows.getCurrent().then((win) => {
+        browser.tabs.query({ active: true, windowId: win.id }).then((tabs) => {
+          setPlatform(platformFromUrl(tabs[0]?.url));
+        });
+      });
+    };
+
+    updateActivePlatform();
+    browser.tabs.onActivated.addListener(updateActivePlatform);
+    browser.tabs.onUpdated.addListener(updateActivePlatform);
+
+    return () => {
+      browser.tabs.onActivated.removeListener(updateActivePlatform);
+      browser.tabs.onUpdated.removeListener(updateActivePlatform);
+    };
+  }, []);
+
+  const isYoutube = platform === 'youtube';
+  const blogger = isYoutube ? ytBlogger : xhsBlogger;
+  const listItems: ListItem[] = isYoutube
+    ? ytVideos.map((v) => ({
+        id: v.videoId,
+        title: v.title,
+        publishTime: v.publishTime,
+        metricCount: v.viewCount,
+        href: v.href,
+      }))
+    : xhsNotes.map((n) => ({
+        id: n.noteId,
+        title: n.title,
+        publishTime: n.publishTime,
+        metricCount: n.likedCount,
+        href: n.href,
+      }));
+  const metricLabel = isYoutube ? '观看量' : '点赞数';
+  const metricIcon = isYoutube ? '👀' : '❤️';
+  const title = isYoutube ? '📺 YouTube 数据分析' : '📊 小红书数据分析';
+
+  // 兜底：首次识别到平台后，自动触发一次采集刷新，避免“页面已渲染但没新 mutation”导致空数据
+  useEffect(() => {
+    if (!bootstrapped) return;
+    if (isYoutube) {
+      youtubeStore.sendRefreshToContentScript();
+    } else {
+      noteStore.sendRefreshToContentScript();
+    }
+  }, [bootstrapped, isYoutube]);
 
   function handleRefresh() {
     setRefreshing(true);
-    noteStore.sendRefreshToContentScript();
+    if (isYoutube) {
+      youtubeStore.sendRefreshToContentScript();
+    } else {
+      noteStore.sendRefreshToContentScript();
+    }
     // 1.5s 后恢复按钮状态（实际数据到了会更新，这里只是动画）
     setTimeout(() => setRefreshing(false), 1500);
+  }
+
+  function handleClear() {
+    if (isYoutube) {
+      youtubeStore.clear();
+    } else {
+      noteStore.clear();
+    }
   }
 
   return (
@@ -52,7 +168,7 @@ function Sidebar() {
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '1px' }}>
-            📊 小红书数据分析
+            {title}
           </div>
           <div
             style={{
@@ -64,16 +180,22 @@ function Sidebar() {
               whiteSpace: 'nowrap',
             }}
           >
-            {blogger || '请打开博主主页'}
+            {blogger || (isYoutube ? '请打开频道 videos 页面' : '请打开博主主页')}
           </div>
-          {/* 博主数据：关注 / 粉丝 / 获赞 */}
-          {(stats.following || stats.followers || stats.likes) && (
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.75)', marginTop: '3px', display: 'flex', gap: '10px' }}>
-              {stats.following && <span>{stats.following} 关注</span>}
-              {stats.followers && <span>{stats.followers} 粉丝</span>}
-              {stats.likes    && <span>{stats.likes} 获赞与收藏</span>}
-            </div>
-          )}
+          {isYoutube
+            ? (ytStats.subscribers || ytStats.videoCount) && (
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.75)', marginTop: '3px', display: 'flex', gap: '10px' }}>
+                  {ytStats.subscribers && <span>{ytStats.subscribers}</span>}
+                  {ytStats.videoCount && <span>{ytStats.videoCount}</span>}
+                </div>
+              )
+            : (xhsStats.following || xhsStats.followers || xhsStats.likes) && (
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.75)', marginTop: '3px', display: 'flex', gap: '10px' }}>
+                  {xhsStats.following && <span>{xhsStats.following} 关注</span>}
+                  {xhsStats.followers && <span>{xhsStats.followers} 粉丝</span>}
+                  {xhsStats.likes && <span>{xhsStats.likes} 获赞与收藏</span>}
+                </div>
+              )}
         </div>
 
         {/* 刷新按钮 */}
@@ -122,7 +244,9 @@ function Sidebar() {
           flexShrink: 0,
         }}
       >
-        💡 滚动博主主页自动采集 · 换博主后点 🔄 重新采集
+        {isYoutube
+          ? '💡 滚动频道 videos 页面自动采集 · 换频道后点 🔄 重新采集'
+          : '💡 滚动博主主页自动采集 · 换博主后点 🔄 重新采集'}
       </div>
 
       {/* Tab 切换 */}
@@ -158,7 +282,16 @@ function Sidebar() {
 
       {/* 内容区 */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {tab === 'list' ? <NoteList /> : <LikeChart />}
+        {tab === 'list' ? (
+          <NoteList
+            items={listItems}
+            metricLabel={metricLabel}
+            metricIcon={metricIcon}
+            onClear={handleClear}
+          />
+        ) : (
+          <LikeChart items={listItems} metricLabel={metricLabel} platform={platform} />
+        )}
       </div>
     </div>
   );
