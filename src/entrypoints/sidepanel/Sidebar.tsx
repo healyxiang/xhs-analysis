@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import NoteList from './NoteList';
 import LikeChart from './LikeChart';
 import { noteStore } from '../../utils/noteStore';
@@ -18,6 +18,10 @@ function platformFromUrl(url?: string): Platform {
 function Sidebar() {
   const [tab, setTab] = useState<Tab>('list');
   const [platform, setPlatform] = useState<Platform>('xhs');
+  const [splitView, setSplitView] = useState(true);
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
 
   const [xhsNotes, setXhsNotes] = useState(noteStore.get());
   const [ytVideos, setYtVideos] = useState(youtubeStore.get());
@@ -111,9 +115,30 @@ function Sidebar() {
       }));
   const metricLabel = isYoutube ? '观看量' : '点赞数';
   const metricIcon = isYoutube ? '👀' : '❤️';
-  const title = isYoutube ? '📺 YouTube 数据分析' : '📊 小红书数据分析';
+  const title = '⏱️ CreatorTimeline';
+  const subtitle = '跨平台内容创作者时间线分析';
+  const platformName = isYoutube ? 'YouTube' : '小红书';
+  const bloggerDisplay = blogger
+    ? `${platformName} · ${blogger}`
+    : `${platformName} · ${isYoutube ? '请打开频道 videos 页面' : '请打开博主主页'}`;
 
-  // 兜底：首次识别到平台后，自动触发一次采集刷新，避免“页面已渲染但没新 mutation”导致空数据
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isDragging.current || !contentRef.current) return;
+      const rect = contentRef.current.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      setSplitRatio(Math.max(0.2, Math.min(0.8, ratio)));
+    }
+    function onMouseUp() { isDragging.current = false; }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  // 兜底：首次识别到平台后，自动触发一次采集刷新，避免”页面已渲染但没新 mutation”导致空数据
   useEffect(() => {
     if (!bootstrapped) return;
     if (isYoutube) {
@@ -167,8 +192,17 @@ function Sidebar() {
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '1px' }}>
-            {title}
+          <div
+            style={{
+              fontSize: '11px',
+              color: 'rgba(255,255,255,0.7)',
+              marginBottom: '1px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {title} · {subtitle}
           </div>
           <div
             style={{
@@ -180,7 +214,7 @@ function Sidebar() {
               whiteSpace: 'nowrap',
             }}
           >
-            {blogger || (isYoutube ? '请打开频道 videos 页面' : '请打开博主主页')}
+            {bloggerDisplay}
           </div>
           {isYoutube
             ? (ytStats.subscribers || ytStats.videoCount) && (
@@ -249,7 +283,7 @@ function Sidebar() {
           : '💡 滚动博主主页自动采集 · 换博主后点 🔄 重新采集'}
       </div>
 
-      {/* Tab 切换 */}
+      {/* Tab 切换 + 并列按钮 */}
       <div
         style={{
           display: 'flex',
@@ -261,33 +295,78 @@ function Sidebar() {
         {([['list', '列表'], ['chart', '趋势图']] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => { if (!splitView) setTab(key); }}
             style={{
               flex: 1,
               padding: '9px 0',
               fontSize: '13px',
-              fontWeight: tab === key ? 600 : 400,
-              color: tab === key ? '#fe2c55' : '#888',
+              fontWeight: !splitView && tab === key ? 600 : 400,
+              color: splitView ? '#ccc' : tab === key ? '#fe2c55' : '#888',
               background: 'none',
               border: 'none',
-              borderBottom: tab === key ? '2px solid #fe2c55' : '2px solid transparent',
-              cursor: 'pointer',
+              borderBottom: !splitView && tab === key ? '2px solid #fe2c55' : '2px solid transparent',
+              cursor: splitView ? 'default' : 'pointer',
               transition: 'color 0.15s',
             }}
           >
             {label}
           </button>
         ))}
+        <button
+          onClick={() => setSplitView((v) => !v)}
+          style={{
+            padding: '9px 10px',
+            fontSize: '12px',
+            fontWeight: splitView ? 600 : 400,
+            color: splitView ? '#fe2c55' : '#888',
+            background: 'none',
+            border: 'none',
+            borderBottom: splitView ? '2px solid #fe2c55' : '2px solid transparent',
+            borderLeft: '1px solid #f0f0f0',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'color 0.15s',
+          }}
+        >
+          {splitView ? '☑ 并列' : '☐ 并列'}
+        </button>
       </div>
 
       {/* 内容区 */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {tab === 'list' ? (
+      <div ref={contentRef} style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        {splitView ? (
+          <>
+            <div style={{ width: `${splitRatio * 100}%`, overflow: 'hidden', flexShrink: 0 }}>
+              <NoteList
+                items={listItems}
+                metricLabel={metricLabel}
+                metricIcon={metricIcon}
+                onClear={handleClear}
+                platform={platform}
+              />
+            </div>
+            <div
+              onMouseDown={(e) => { isDragging.current = true; e.preventDefault(); }}
+              style={{
+                width: '5px',
+                flexShrink: 0,
+                cursor: 'col-resize',
+                backgroundColor: '#f0f0f0',
+                borderLeft: '1px solid #e0e0e0',
+                borderRight: '1px solid #e0e0e0',
+              }}
+            />
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <LikeChart items={listItems} metricLabel={metricLabel} platform={platform} />
+            </div>
+          </>
+        ) : tab === 'list' ? (
           <NoteList
             items={listItems}
             metricLabel={metricLabel}
             metricIcon={metricIcon}
             onClear={handleClear}
+            platform={platform}
           />
         ) : (
           <LikeChart items={listItems} metricLabel={metricLabel} platform={platform} />

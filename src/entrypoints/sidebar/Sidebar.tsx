@@ -38,7 +38,7 @@ function Sidebar({ onClose, onToggleFullscreen, isFullscreen }: SidebarProps) {
         }}
       >
         <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#fff' }}>
-          📊 小红书数据分析
+          ⏱️ CreatorTimeline
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           {onToggleFullscreen && (

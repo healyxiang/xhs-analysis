@@ -9,8 +9,9 @@ export default defineConfig({
   manifest: {
     name:
       process.env.NODE_ENV === "development"
-        ? "[DEV] 小红书数据分析"
-        : "小红书数据分析",
+        ? "[DEV] CreatorTimeline · 跨平台内容创作者时间线分析"
+        : "CreatorTimeline · 跨平台内容创作者时间线分析",
+    description: "跨平台内容创作者时间线分析",
     permissions: ["sidePanel", "storage", "tabs"],
   },
 

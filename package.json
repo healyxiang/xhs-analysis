@@ -1,6 +1,6 @@
 {
-  "name": "xhs-analysis",
-  "description": "小红书数据分析浏览器插件",
+  "name": "creator-timeline",
+  "description": "CreatorTimeline - 跨平台内容创作者时间线分析",
   "private": true,
   "version": "0.0.12",
   "type": "module",

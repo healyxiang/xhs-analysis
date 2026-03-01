@@ -1,6 +1,6 @@
-# WXT + React
+# CreatorTimeline
 
-This template should help get you started developing with React in WXT.
+跨平台内容创作者时间线分析
 
 ## 小红书发布时间获取原理（通过 noteId）
 

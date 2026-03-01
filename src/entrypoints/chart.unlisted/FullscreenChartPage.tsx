@@ -78,6 +78,27 @@ function formatDate(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
+function buildYtDateLabels(items: DisplayItem[]): Map<string, string> {
+  const dateGroups = new Map<string, { id: string; publishTime: number }[]>();
+  for (const item of items) {
+    const date = item.publishTime ? formatDate(item.publishTime) : '未知';
+    if (!dateGroups.has(date)) dateGroups.set(date, []);
+    dateGroups.get(date)!.push({ id: item.id, publishTime: item.publishTime });
+  }
+  const labels = new Map<string, string>();
+  for (const [date, group] of dateGroups) {
+    if (group.length === 1) {
+      labels.set(group[0].id, date);
+    } else {
+      const sorted = [...group].sort((a, b) => a.publishTime - b.publishTime);
+      sorted.forEach(({ id }, idx) => {
+        labels.set(id, `${date}-${idx + 1}`);
+      });
+    }
+  }
+  return labels;
+}
+
 function formatCount(n: number): string {
   if (n >= 10000) return `${(n / 10000).toFixed(1)}w`;
   return String(n);
@@ -103,10 +124,7 @@ export default function FullscreenChartPage() {
     const currentPlatform: Platform = p === 'youtube' ? 'youtube' : 'xhs';
     setPlatform(currentPlatform);
 
-    // 根据平台动态设置窗口标题
-    document.title = currentPlatform === 'youtube'
-      ? '趋势图 - YouTube 数据分析'
-      : '趋势图 - 小红书数据分析';
+    document.title = '趋势图 - CreatorTimeline';
 
     const keys =
       currentPlatform === 'youtube'
@@ -151,6 +169,9 @@ export default function FullscreenChartPage() {
   const metricLabel = platform === 'youtube' ? '观看量' : '点赞数';
   const metricIcon = platform === 'youtube' ? '👀' : '❤️';
   const data = [...items].sort((a, b) => a.publishTime - b.publishTime);
+  const ytDateLabels = platform === 'youtube' ? buildYtDateLabels(data) : null;
+  const platformName = platform === 'youtube' ? 'YouTube' : '小红书';
+  const bloggerDisplay = blogger ? `${platformName} · ${blogger}` : '';
 
   return (
     <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', backgroundColor: '#fff' }}>
@@ -161,7 +182,7 @@ export default function FullscreenChartPage() {
           </h1>
           {blogger && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', color: 'rgba(255,255,255,0.9)', paddingLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.3)' }}>
-              <span style={{ fontWeight: 600 }}>{blogger}</span>
+              <span style={{ fontWeight: 600 }}>{bloggerDisplay}</span>
               {platform === 'youtube'
                 ? <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>{ytStats.subscribers} {ytStats.videoCount}</span>
                 : <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>{xhsStats.following} {xhsStats.followers} {xhsStats.likes}</span>}
@@ -206,7 +227,7 @@ export default function FullscreenChartPage() {
                     {item.title || '（无标题）'}
                   </div>
                   <div style={{ display: 'flex', gap: '24px', fontSize: '12px', color: '#888', flexShrink: 0 }}>
-                    <span style={{ minWidth: '120px' }}>{formatTime(item.publishTime)}</span>
+                    <span style={{ minWidth: '120px' }}>{platform === 'xhs' ? formatTime(item.publishTime) : (ytDateLabels?.get(item.id) ?? formatDate(item.publishTime))}</span>
                     <span style={{ color: '#fe2c55', fontWeight: 500, minWidth: '100px', textAlign: 'right' }}>
                       {metricIcon} {formatCount(item.metric)}
                     </span>

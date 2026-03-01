@@ -61,9 +61,9 @@ export function parseNoteFromDom(el: Element): NoteItem | null {
     href,
   };
   console.log(
-    `[xhs-analysis] ${result.title.slice(0, 20)} | id: ${result.noteId}`,
+    `[creator-timeline:xhs] ${result.title.slice(0, 20)} | id: ${result.noteId}`,
   );
-  console.log(`[xhs-analysis] href: ${result.href}`);
+  console.log(`[creator-timeline:xhs] href: ${result.href}`);
   return result;
 }
 

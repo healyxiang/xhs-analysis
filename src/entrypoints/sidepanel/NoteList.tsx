@@ -8,11 +8,39 @@ export interface ListItem {
   href: string;
 }
 
-function formatTime(ms: number): string {
+function formatDateOnly(ms: number): string {
   if (!ms) return '未知';
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function formatXhsTime(ms: number): string {
+  if (!ms) return '未知';
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildYtDateLabels(items: ListItem[]): Map<string, string> {
+  const dateGroups = new Map<string, { id: string; publishTime: number }[]>();
+  for (const item of items) {
+    const date = item.publishTime ? formatDateOnly(item.publishTime) : '未知';
+    if (!dateGroups.has(date)) dateGroups.set(date, []);
+    dateGroups.get(date)!.push({ id: item.id, publishTime: item.publishTime });
+  }
+  const labels = new Map<string, string>();
+  for (const [date, group] of dateGroups) {
+    if (group.length === 1) {
+      labels.set(group[0].id, date);
+    } else {
+      const sorted = [...group].sort((a, b) => a.publishTime - b.publishTime);
+      sorted.forEach(({ id }, idx) => {
+        labels.set(id, `${date}-${idx + 1}`);
+      });
+    }
+  }
+  return labels;
 }
 
 function formatCount(n: number): string {
@@ -25,6 +53,7 @@ interface NoteListProps {
   metricLabel: string;
   metricIcon: string;
   onClear: () => void;
+  platform: 'xhs' | 'youtube';
 }
 
 export default function NoteList({
@@ -32,9 +61,11 @@ export default function NoteList({
   metricLabel,
   metricIcon,
   onClear,
+  platform,
 }: NoteListProps) {
   const [sortBy, setSortBy] = useState<'time' | 'metric'>('time');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+  const ytDateLabels = platform === 'youtube' ? buildYtDateLabels(items) : null;
 
   function handleSortClick(key: 'time' | 'metric') {
     if (key === sortBy) {
@@ -178,7 +209,7 @@ export default function NoteList({
                 {note.title || '（无标题）'}
               </div>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#888' }}>
-                <span>🕐 {formatTime(note.publishTime)}</span>
+                <span>🕐 {platform === 'xhs' ? formatXhsTime(note.publishTime) : (ytDateLabels?.get(note.id) ?? formatDateOnly(note.publishTime))}</span>
                 <span>
                   {metricIcon} {formatCount(note.metricCount)}
                 </span>
